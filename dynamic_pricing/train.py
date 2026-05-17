@@ -1,9 +1,12 @@
 import numpy as np
+from pathlib import Path
 from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 from stable_baselines3.common.callbacks import BaseCallback
 
 from dynamic_pricing.env import MicroloanPricingEnv
+
+MODEL_DIR = Path("models")
 
 
 class FairnessLoggingCallback(BaseCallback):
@@ -37,6 +40,12 @@ class FairnessLoggingCallback(BaseCallback):
         return True
 
 
+def save_model_artifacts(model, env, output_dir: Path = MODEL_DIR) -> None:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    model.save(str(output_dir / "ppo_microloan.zip"))
+    env.save(str(output_dir / "vec_normalize.pkl"))
+
+
 def train():
     env = DummyVecEnv([lambda: MicroloanPricingEnv(max_steps=100)])
     env = VecNormalize(env, norm_obs=True, norm_reward=False)
@@ -55,8 +64,7 @@ def train():
     callback = FairnessLoggingCallback()
     model.learn(total_timesteps=20_000, callback=callback)
 
-    model.save("models/ppo_microloan.zip")
-    env.save("models/vec_normalize.pkl")
+    save_model_artifacts(model, env)
 
     print("\n--- Training complete ---")
     print(f"Total episodes: {len(callback.episode_rewards)}")

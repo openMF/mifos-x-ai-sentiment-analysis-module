@@ -37,16 +37,14 @@ class MicroloanPricingEnv(gym.Env):
         self.step_count = 0
         self._client = None
 
-        # Fairness tracking (snapshot survives VecEnv auto-reset)
         self._group_rates: dict[str, list[float]] = {"high": [], "low": []}
-        self._last_fairness: dict | None = None
 
     def _generate_client(self) -> np.ndarray:
-        credit_score = np.random.uniform(0.3, 1.0)
-        income = np.random.uniform(0.2, 1.0)
-        loan_amount = np.random.uniform(0.1, 1.0)
-        term = np.random.uniform(0.1, 1.0)
-        is_returning = float(np.random.randint(0, 2))
+        credit_score = self.np_random.uniform(0.3, 1.0)
+        income = self.np_random.uniform(0.2, 1.0)
+        loan_amount = self.np_random.uniform(0.1, 1.0)
+        term = self.np_random.uniform(0.1, 1.0)
+        is_returning = float(self.np_random.integers(0, 2))
         return np.array(
             [credit_score, income, loan_amount, term, is_returning],
             dtype=np.float32,
@@ -60,11 +58,10 @@ class MicroloanPricingEnv(gym.Env):
         rate = RATE_BUCKETS[action]
         loan = float(self._client[2])
         prob = self._repayment_prob(rate)
-        repaid = np.random.random() < prob
+        repaid = self.np_random.random() < prob
         if repaid:
-            return (1.0 + rate) * loan
-        else:
-            return -loan
+            return float(rate * loan)
+        return -loan
 
     def reset(
         self, *, seed: Optional[int] = None, options: Optional[dict] = None
@@ -75,9 +72,7 @@ class MicroloanPricingEnv(gym.Env):
         self._group_rates = {"high": [], "low": []}
         return self._client.copy(), {}
 
-    def step(
-        self, action: int
-    ) -> tuple[np.ndarray, float, bool, bool, dict]:
+    def step(self, action: int) -> tuple[np.ndarray, float, bool, bool, dict]:
         assert self._client is not None, "Call reset() before step()."
         rate = float(RATE_BUCKETS[action])
         reward = self._compute_reward(action)
@@ -89,16 +84,17 @@ class MicroloanPricingEnv(gym.Env):
         self.step_count += 1
         terminated = self.step_count >= self.max_steps
         truncated = False
-
+        info = {}
         if terminated:
-            self._last_fairness = self.get_fairness_metrics()
+            info["fairness"] = self.get_fairness_metrics()
 
         self._client = self._generate_client()
-        info = {"fairness": self._last_fairness} if self._last_fairness else {}
         return self._client.copy(), reward, terminated, truncated, info
 
     def get_fairness_metrics(self) -> dict:
-        avg_high = np.mean(self._group_rates["high"]) if self._group_rates["high"] else 0.0
+        avg_high = (
+            np.mean(self._group_rates["high"]) if self._group_rates["high"] else 0.0
+        )
         avg_low = np.mean(self._group_rates["low"]) if self._group_rates["low"] else 0.0
         return {
             "avg_rate_high_credit": float(avg_high),
