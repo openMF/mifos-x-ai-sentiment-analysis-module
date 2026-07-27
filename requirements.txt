@@ -22,3 +22,6 @@ openpyxl
 passlib
 bcrypt
 PyJWT
+fpdf2
+matplotlib
+xlsxwriter

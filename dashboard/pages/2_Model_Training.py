@@ -288,7 +288,16 @@ with tab2:
         uploaded_file = st.file_uploader("Upload Dataset (CSV/Excel)", type=["csv", "xlsx"])
         if uploaded_file:
             df = pd.read_csv(uploaded_file) if uploaded_file.name.endswith('.csv') else pd.read_excel(uploaded_file)
-            st.write("Data Preview:", df.head(3))
+            
+            st.markdown("#### Data Preview")
+            st.dataframe(df.head(5))
+            
+            # Simple visualization preview if numeric cols exist
+            numeric_cols = df.select_dtypes(include='number').columns
+            if len(numeric_cols) > 0:
+                viz_col = "loan_amount" if "loan_amount" in df.columns else numeric_cols[0]
+                fig = px.histogram(df, x=viz_col, title=f"Distribution of {viz_col}", template="plotly_white", color_discrete_sequence=['#2F80ED'])
+                st.plotly_chart(fig, use_container_width=True)
             
             # 3. Column Mapping
             st.markdown("#### 2. Feature Mapping")
@@ -307,28 +316,22 @@ with tab2:
                     mapping[req_feat] = st.selectbox(f"Map '{req_feat}'", ["Skip/Generate"] + list(df.columns), index=(["Skip/Generate"] + list(df.columns)).index(guess) if guess in df.columns else 0)
             
             if st.button("Save Dataset & Schema"):
-                os.makedirs("datasets/custom", exist_ok=True)
-                filepath = f"datasets/custom/{uploaded_file.name}"
-                with open(filepath, "wb") as f:
-                    f.write(uploaded_file.getbuffer())
-                
                 reverse_mapping = {v: k for k, v in mapping.items() if v != "Skip/Generate"}
-                payload = {
+                
+                files = {"file": (uploaded_file.name, uploaded_file.getvalue(), "application/octet-stream")}
+                data = {
                     "project_id": project_id,
-                    "filename": uploaded_file.name,
-                    "filepath": filepath,
                     "schema_mapping": json.dumps(reverse_mapping),
                     "row_count": len(df)
                 }
-                res = api_request("POST", "training/datasets", json=payload)
-                if res.status_code == 200:
-                    import sys
-                    sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-                    from services.dataset_service import load_and_preprocess_dataset
-                    load_and_preprocess_dataset(filepath, reverse_mapping)
-                    st.success("Dataset preprocessed and registered successfully!")
-                else:
-                    st.error("Failed to register dataset.")
+                
+                with st.spinner("Uploading and processing dataset..."):
+                    res = api_request("POST", "training/datasets", files=files, data=data)
+                    
+                    if res.status_code == 200:
+                        st.success("Dataset uploaded and processed successfully!")
+                    else:
+                        st.error(f"Failed to register dataset: {res.text}")
 
 # ==========================================
 # TAB 3: Hyperparameters & Launch
@@ -343,9 +346,14 @@ with tab3:
         with c1:
             algorithm = st.selectbox("RL Algorithm", ["PPO", "DQN", "DDQN", "SAC"])
             if project_id:
-                dsets = api_request("GET", "training/datasets?project_id={project_id}").json()
-                dset_opts = {d["filename"]: d["id"] for d in dsets}
-                dataset_id = st.selectbox("Dataset", list(dset_opts.keys()))
+                dsets_res = api_request("GET", f"training/datasets?project_id={project_id}")
+                if dsets_res.status_code == 200:
+                    dsets = dsets_res.json()
+                    dset_opts = {d["filename"]: d["id"] for d in dsets}
+                    dataset_id = st.selectbox("Dataset", list(dset_opts.keys()))
+                else:
+                    st.warning("Failed to load datasets.")
+                    dataset_id = None
             else:
                 st.warning("Please select a project in the Data Wizard tab first.")
                 dataset_id = None
@@ -356,6 +364,11 @@ with tab3:
             batch_size = st.number_input("Batch Size", value=int(profile.get("batch_size", 64)))
             buffer_size = st.number_input("Buffer Size (Transitions)", value=int(profile.get("buffer_size", 100000)))
             total_timesteps = st.number_input("Total Timesteps", value=10000, step=1000)
+            gamma = st.slider("Gamma (Discount Factor)", min_value=0.8, max_value=0.999, value=0.99)
+            
+            ent_coef = 0.0
+            if algorithm in ["PPO", "SAC"]:
+                ent_coef = st.number_input("Entropy Coefficient", value=0.01, format="%.3f")
             
         if st.button("🚀 Launch Training Job", use_container_width=True, type="primary"):
             if dataset_id:
@@ -368,7 +381,9 @@ with tab3:
                         "learning_rate": learning_rate,
                         "batch_size": batch_size,
                         "buffer_size": buffer_size,
-                        "total_timesteps": total_timesteps
+                        "total_timesteps": total_timesteps,
+                        "gamma": gamma,
+                        "ent_coef": ent_coef
                     })
                 }
                 res = api_request("POST", "training/experiments", json=payload)
@@ -387,7 +402,7 @@ with tab4:
     exp_id = st.session_state.active_experiment_id
     if exp_id:
         try:
-            status = api_request("GET", "training/experiments/{exp_id}/status").json()
+            status = api_request("GET", f"training/experiments/{exp_id}/status").json()
             
             st.markdown(f"### Status: **{status['status']}** | Progress: **{status['progress']*100:.1f}%**")
             st.progress(status["progress"])
@@ -398,15 +413,23 @@ with tab4:
             col3.metric("Training Speed", f"{status['speed']} steps/s")
             
             if len(status["rewards"]) > 0:
+                df_plot = pd.DataFrame({"Reward": status["rewards"], "Loss": status["losses"]})
+                # Add Moving Average
+                if len(df_plot) > 5:
+                    df_plot["Reward_MA"] = df_plot["Reward"].rolling(window=5, min_periods=1).mean()
+                else:
+                    df_plot["Reward_MA"] = df_plot["Reward"]
+                
                 fig = make_subplots(specs=[[{"secondary_y": True}]])
-                fig.add_trace(go.Scatter(y=status["rewards"], mode="lines", name="Reward", line=dict(color="#00A67E")), secondary_y=False)
-                fig.add_trace(go.Scatter(y=status["losses"], mode="lines", name="Loss", line=dict(color="#ef4444", dash='dash')), secondary_y=True)
+                fig.add_trace(go.Scatter(y=df_plot["Reward"], mode="lines", name="Raw Reward", line=dict(color="rgba(0,166,126,0.3)")), secondary_y=False)
+                fig.add_trace(go.Scatter(y=df_plot["Reward_MA"], mode="lines", name="Reward (MA)", line=dict(color="#00A67E", width=2)), secondary_y=False)
+                fig.add_trace(go.Scatter(y=df_plot["Loss"], mode="lines", name="Loss", line=dict(color="#ef4444", dash='dash')), secondary_y=True)
                 fig.update_layout(title="Learning Curve", template="plotly_dark")
                 st.plotly_chart(fig, use_container_width=True)
             
             if status["status"] == "Running":
                 if st.button("⏹️ Stop Training"):
-                    api_request("POST", "training/experiments/{exp_id}/cancel")
+                    api_request("POST", f"training/experiments/{exp_id}/cancel")
                     st.rerun()
                 time.sleep(2)
                 st.rerun()
@@ -425,11 +448,41 @@ with tab5:
     st.subheader("Experiment Tracking & History")
     if project_id:
         try:
-            exps = api_request("GET", "training/experiments?project_id={project_id}").json()
+            exps = api_request("GET", f"training/experiments?project_id={project_id}").json()
             if exps:
                 df_exps = pd.DataFrame(exps)
                 df_exps['hyperparameters'] = df_exps['hyperparameters'].apply(lambda x: str(json.loads(x)))
-                st.dataframe(df_exps[["id", "algorithm", "profile_name", "status", "best_reward", "start_time", "hyperparameters"]])
+                
+                # Interactive selection
+                exp_opts = {f"Experiment #{r['id']} ({r['algorithm']} - Reward: {r['best_reward']})": r['id'] for _, r in df_exps.iterrows()}
+                selected_exp_name = st.selectbox("Select Experiment to Deploy", list(exp_opts.keys()))
+                selected_exp_id = exp_opts[selected_exp_name]
+                
+                st.dataframe(df_exps[df_exps['id'] == selected_exp_id][["id", "algorithm", "status", "best_reward", "start_time", "hyperparameters"]])
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("🚀 Deploy Model to Production", type="primary", use_container_width=True):
+                        with st.spinner("Deploying model and reloading API..."):
+                            dep_res = api_request("POST", f"training/experiments/{selected_exp_id}/deploy")
+                            if dep_res.status_code == 200:
+                                st.success(f"Successfully deployed! API is now serving the new model.")
+                            else:
+                                st.error(f"Failed to deploy: {dep_res.text}")
+                
+                with col2:
+                    if st.button("🤖 Generate AI Analysis of this Run", use_container_width=True):
+                        with st.spinner("Analyzing hyperparameter efficacy with Ollama..."):
+                            analysis_res = api_request("GET", f"training/experiments/{selected_exp_id}/analyze")
+                            if analysis_res.status_code == 200:
+                                st.markdown(f"""
+                                <div style="background-color: #2D3748; padding: 15px; border-radius: 8px; border-left: 5px solid #00A67E;">
+                                    <strong>🤖 AI Analysis:</strong><br>
+                                    {analysis_res.json().get('analysis', '')}
+                                </div>
+                                """, unsafe_allow_html=True)
+                            else:
+                                st.error("Failed to generate analysis.")
             else:
                 st.write("No experiments recorded yet in this project.")
         except:

@@ -17,6 +17,7 @@ class LoanApplicationBase(BaseModel):
     collateral: str = "None"
     existing_loans: int = 0
     education: str = "High School"
+    interview_notes: Optional[str] = None
 
 class LoanApplicationCreate(LoanApplicationBase):
     pass
@@ -47,6 +48,7 @@ class RLPredictionOut(BaseModel):
     recommended_interest_rate: float
     risk_score: float
     confidence: float
+    behavioral_score: Optional[float] = None
     
     class Config:
         from_attributes = True

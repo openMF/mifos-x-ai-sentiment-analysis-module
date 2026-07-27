@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, BackgroundTasks, HTTPException, status
+from fastapi import FastAPI, Depends, BackgroundTasks, HTTPException, status, File, Form, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
@@ -11,6 +11,7 @@ from backend import auth
 from services import training_service
 from services import prediction_service
 from ollama.explain import generate_explanation
+from textblob import TextBlob
 import numpy as np
 import asyncio
 from analytics.fairness import run_fairness_audit
@@ -129,11 +130,37 @@ def get_datasets(project_id: Optional[int] = None, db: Session = Depends(get_db)
     return query.order_by(models.CustomDataset.created_at.desc()).all()
 
 @app.post("/api/training/datasets", response_model=schemas.CustomDatasetOut)
-def create_dataset(dataset: schemas.CustomDatasetCreate, db: Session = Depends(get_db)):
-    db_dataset = models.CustomDataset(**dataset.model_dump())
+def create_dataset(
+    project_id: int = Form(...),
+    schema_mapping: str = Form(...),
+    row_count: int = Form(...),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db)
+):
+    if not (file.filename.endswith('.csv') or file.filename.endswith('.xlsx')):
+        raise HTTPException(status_code=400, detail="Only CSV or Excel files are allowed.")
+    
+    os.makedirs("datasets/custom", exist_ok=True)
+    filepath = f"datasets/custom/{file.filename}"
+    with open(filepath, "wb") as buffer:
+        buffer.write(file.file.read())
+        
+    db_dataset = models.CustomDataset(
+        project_id=project_id,
+        filename=file.filename,
+        filepath=filepath,
+        schema_mapping=schema_mapping,
+        row_count=row_count
+    )
     db.add(db_dataset)
     db.commit()
     db.refresh(db_dataset)
+    
+    # Process dataset synchronously for immediate availability
+    from services.dataset_service import load_and_preprocess_dataset
+    import json
+    load_and_preprocess_dataset(filepath, json.loads(schema_mapping))
+    
     return db_dataset
 
 @app.get("/api/training/experiments", response_model=List[schemas.TrainingExperimentOut])
@@ -179,6 +206,50 @@ def get_experiment_status(exp_id: int):
 def cancel_experiment(exp_id: int):
     TrainingJobManager.cancel_job(exp_id)
     return {"status": "cancelled"}
+
+@app.post("/api/training/experiments/{exp_id}/deploy")
+def deploy_experiment_model(exp_id: int, db: Session = Depends(get_db)):
+    exp = db.query(models.TrainingExperiment).filter(models.TrainingExperiment.id == exp_id).first()
+    if not exp or exp.status != "Completed":
+        raise HTTPException(status_code=400, detail="Experiment not found or not completed.")
+    
+    import shutil
+    source_model = f"models/{exp.algorithm.lower()}_experiment_{exp.id}.zip"
+    dest_model = f"models/{exp.algorithm.lower()}_model.zip"
+    
+    if not os.path.exists(source_model):
+        raise HTTPException(status_code=404, detail=f"Saved model {source_model} not found.")
+        
+    shutil.copy2(source_model, dest_model)
+    
+    from services.prediction_service import reload_model
+    if reload_model(exp.algorithm):
+        return {"status": "success", "message": f"{exp.algorithm} deployed to production!"}
+    else:
+        raise HTTPException(status_code=500, detail="Failed to load model into memory.")
+
+@app.get("/api/training/experiments/{exp_id}/analyze")
+def analyze_experiment(exp_id: int, db: Session = Depends(get_db)):
+    exp = db.query(models.TrainingExperiment).filter(models.TrainingExperiment.id == exp_id).first()
+    if not exp:
+        raise HTTPException(status_code=404, detail="Experiment not found.")
+    
+    import json
+    from ollama.explain import analyze_training_run
+    
+    try:
+        hp = json.loads(exp.hyperparameters) if exp.hyperparameters else {}
+    except:
+        hp = {}
+        
+    analysis = analyze_training_run(
+        algorithm=exp.algorithm,
+        hyperparameters=hp,
+        best_reward=exp.best_reward or 0.0,
+        status=exp.status
+    )
+    
+    return {"analysis": analysis}
 
 # ─── Quick Train (backward-compatible) ────────────────────────────
 @app.post("/api/train")
@@ -226,6 +297,20 @@ def predict_loan(application: schemas.LoanApplicationCreate, db: Session = Depen
     
     preds = prediction_service.predict_all_models(state, application.credit_score, application.income)
     
+    behavioral_score = None
+    if application.interview_notes:
+        try:
+            polarity = TextBlob(application.interview_notes).sentiment.polarity
+            # Map -1 to 1 into 0 to 1 where 1 is good (high polarity)
+            behavioral_score = (polarity + 1) / 2
+            
+            # Slightly adjust risk score based on behavioral score (e.g. up to 10% change)
+            # If behavioral score is high (near 1), reduce risk score.
+            risk_adjustment = (0.5 - behavioral_score) * 0.1 
+            preds['risk_score'] = max(0.0, min(1.0, preds['risk_score'] + risk_adjustment))
+        except Exception as e:
+            logger.error(f"TextBlob error: {e}")
+    
     db_pred = models.RLPrediction(
         application_id=db_app.id,
         ppo_prediction=preds['ppo_prediction'],
@@ -235,7 +320,8 @@ def predict_loan(application: schemas.LoanApplicationCreate, db: Session = Depen
         best_model=preds['best_model'],
         recommended_interest_rate=preds['recommended_interest_rate'],
         risk_score=preds['risk_score'],
-        confidence=preds['confidence']
+        confidence=preds['confidence'],
+        behavioral_score=behavioral_score
     )
     db.add(db_pred)
     db.commit()
@@ -267,6 +353,7 @@ def predict_loan(application: schemas.LoanApplicationCreate, db: Session = Depen
             "risk_score": preds['risk_score'],
             "risk_level": "Low" if preds['risk_score'] < 0.33 else "Medium" if preds['risk_score'] < 0.66 else "High",
             "confidence": preds['confidence'],
+            "behavioral_score": behavioral_score,
         },
         "recommended_pricing": {
             "best_model": preds['best_model'],

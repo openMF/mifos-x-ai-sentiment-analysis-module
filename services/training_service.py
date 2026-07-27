@@ -56,7 +56,9 @@ class LiveDashboardCallback(BaseCallback):
                 
         return True
 
-def _run_training_thread(experiment_id, model_type, dataset_path, hyperparameters, total_timesteps):
+import json
+
+def _run_training_thread(experiment_id, model_type, dataset_path, hyperparameters_str, total_timesteps_fallback):
     db_session = SessionLocal()
     try:
         ACTIVE_JOBS[experiment_id] = {
@@ -77,20 +79,27 @@ def _run_training_thread(experiment_id, model_type, dataset_path, hyperparameter
 
         logger.info(f"🚀 Started Async Training: {model_type} on {dataset_path}")
 
+        # Parse hyperparameters
+        try:
+            hp = json.loads(hyperparameters_str) if isinstance(hyperparameters_str, str) else hyperparameters_str
+        except:
+            hp = {}
+            
+        total_timesteps = hp.pop("total_timesteps", total_timesteps_fallback)
+        
         callback = LiveDashboardCallback(experiment_id, total_timesteps, db_session)
         is_continuous = (model_type == "SAC")
         env = LoanEnv(dataset_path, continuous_action=is_continuous)
 
-        # Here we would normally unpack hyperparameters and pass them to the train_* function.
-        # For simplicity, we just pass total_timesteps.
+        # Pass hyperparameters and callback to the training functions
         if model_type == "PPO":
-            train_ppo(env, db_session, total_timesteps) # Ideally modify train_ppo to accept custom callbacks
+            train_ppo(env, db_session, total_timesteps=total_timesteps, callback=[callback], experiment_id=experiment_id, **hp)
         elif model_type == "DQN":
-            train_dqn(env, db_session, total_timesteps)
+            train_dqn(env, db_session, total_timesteps=total_timesteps, callback=[callback], experiment_id=experiment_id, **hp)
         elif model_type == "DDQN":
-            train_ddqn(env, db_session, total_timesteps)
+            train_ddqn(env, db_session, total_timesteps=total_timesteps, callback=[callback], experiment_id=experiment_id, **hp)
         elif model_type == "SAC":
-            train_sac(env, db_session, total_timesteps)
+            train_sac(env, db_session, total_timesteps=total_timesteps, callback=[callback], experiment_id=experiment_id, **hp)
 
         # Mark finished
         ACTIVE_JOBS[experiment_id]["status"] = "Completed"

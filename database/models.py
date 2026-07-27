@@ -28,6 +28,7 @@ class LoanApplication(Base):
     collateral = Column(String, default="None")
     existing_loans = Column(Integer, default=0)
     education = Column(String, default="High School")
+    interview_notes = Column(String, nullable=True)
     timestamp = Column(DateTime(timezone=True), server_default=func.now())
 
 class RLPrediction(Base):
@@ -43,6 +44,7 @@ class RLPrediction(Base):
     recommended_interest_rate = Column(Float)
     risk_score = Column(Float)
     confidence = Column(Float)
+    behavioral_score = Column(Float, nullable=True)
 
 class TrainingHistory(Base):
     __tablename__ = "training_history"
