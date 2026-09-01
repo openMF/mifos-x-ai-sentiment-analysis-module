@@ -206,7 +206,7 @@ with col_center:
             else:
                 yield "Error communicating with local AI engine."
         except:
-            yield f"[OLLAMA OFFLINE] Connect to Ollama (port 11434). Model selected: {ollama_model}."
+            yield f"[FALLBACK] Unable to connect to local AI engine (port 11434). Model selected: {ollama_model}."
 
     user_input = st.chat_input("Ask the AI Assistant...")
     active_prompt = quick_prompt if quick_prompt else user_input

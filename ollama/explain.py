@@ -57,7 +57,7 @@ def generate_explanation(applicant_data: dict, prediction_data: dict, model=DEFA
             except json.JSONDecodeError:
                 logger.error("Failed to parse JSON from Ollama")
                 return {
-                    "customer_friendly_explanation": "Error parsing AI response.",
+                    "customer_friendly_explanation": "[FALLBACK] Error parsing AI response.",
                     "officer_technical_explanation": response_text,
                     "suggested_improvements": "N/A"
                 }
@@ -79,14 +79,14 @@ def generate_explanation(applicant_data: dict, prediction_data: dict, model=DEFA
         else:
             customer_msg += " Unfortunately, we could not offer you a loan at this time due to your risk profile."
             
-        tech_msg = f"[OLLAMA OFFLINE FALLBACK] Engine: {model_used}. Decision: {status}. "
+        tech_msg = f"Engine: {model_used}. Decision: {status}. "
         tech_msg += f"Key metrics: Credit={credit}, Debt/Income ratio={round(debt/income, 2)}. "
         tech_msg += "The agent balanced the applicant's risk against expected reward to select this continuous rate."
         
         return {
-            "customer_friendly_explanation": customer_msg,
-            "officer_technical_explanation": tech_msg,
-            "suggested_improvements": "Lower your existing debt ratio and improve your credit score to secure a better rate in the future."
+            "customer_friendly_explanation": f"[FALLBACK] {customer_msg}",
+            "officer_technical_explanation": f"[FALLBACK] {tech_msg}",
+            "suggested_improvements": "[FALLBACK] Lower your existing debt ratio and improve your credit score to secure a better rate in the future."
         }
     except Exception as e:
         logger.error(f"Error calling Ollama: {e}")
@@ -120,7 +120,7 @@ def analyze_training_run(algorithm: str, hyperparameters: dict, best_reward: flo
             return result.get("response", "Analysis not generated.")
         return "[Error: Ollama API returned an error.]"
     except requests.exceptions.ConnectionError:
-        return f"[OLLAMA OFFLINE FALLBACK] The {algorithm} model reached a best reward of {best_reward}. The hyperparameters used were {json.dumps(hyperparameters)}. This indicates the model learned a policy to some degree, but further tuning of learning rate and batch size might be required to achieve convergence."
+        return f"[FALLBACK] The {algorithm} model reached a best reward of {best_reward}. The hyperparameters used were {json.dumps(hyperparameters)}. This indicates the model learned a policy to some degree, but further tuning of learning rate and batch size might be required to achieve convergence."
     except Exception as e:
         return f"[Error connecting to Ollama: {str(e)}]"
 
@@ -145,9 +145,9 @@ def generate_portfolio_summary(stats: dict, model=DEFAULT_MODEL) -> str:
         response = requests.post(OLLAMA_URL, json=payload, timeout=30)
         if response.status_code == 200:
             return response.json().get("response", "")
-        return "[Ollama error generating summary]"
+        return "[Error generating summary]"
     except requests.exceptions.ConnectionError:
-        return "[OLLAMA OFFLINE FALLBACK] The portfolio shows an approval rate of {:.1f}% across {} applications. The average risk score is {:.2f}, indicating standard market conditions.".format(stats.get('approval_rate', 0), stats.get('total_apps', 0), stats.get('avg_risk', 0))
+        return "[FALLBACK] The portfolio shows an approval rate of {:.1f}% across {} applications. The average risk score is {:.2f}, indicating standard market conditions.".format(stats.get('approval_rate', 0), stats.get('total_apps', 0), stats.get('avg_risk', 0))
     except Exception as e:
         return f"[Error: {str(e)}]"
 
@@ -169,8 +169,8 @@ def generate_fairness_audit_summary(audit_metrics: dict, model=DEFAULT_MODEL) ->
         response = requests.post(OLLAMA_URL, json=payload, timeout=30)
         if response.status_code == 200:
             return response.json().get("response", "")
-        return "[Ollama error generating audit]"
+        return "[Error generating audit]"
     except requests.exceptions.ConnectionError:
-        return "[OLLAMA OFFLINE FALLBACK] Automated audit check completed. If any metric is below 0.8, the AI model exhibits disparate impact and must be reviewed immediately to ensure ECOA compliance."
+        return "[FALLBACK] Automated audit check completed. If any metric is below 0.8, the AI model exhibits disparate impact and must be reviewed immediately to ensure ECOA compliance."
     except Exception as e:
         return f"[Error: {str(e)}]"

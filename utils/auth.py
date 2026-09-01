@@ -2,7 +2,7 @@ import streamlit as st
 import requests
 
 ROLES = ["Customer", "Loan Officer", "Risk Analyst", "Administrator"]
-API_URL = "http://localhost:8000/api"
+API_URL = "http://127.0.0.1:8000/api"
 
 def require_role(allowed_roles: list):
     """Decorator or function to check if the current user has access to a page."""
