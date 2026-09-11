@@ -14,10 +14,9 @@ except ImportError:
 
 from ollama.explain import generate_portfolio_summary, generate_fairness_audit_summary
 
-st.set_page_config(page_title="Reports & Exports", page_icon="📄", layout="wide")
+st.set_page_config(page_title="Reports & Exports", layout="wide")
 
-render_sidebar_auth()
-require_role(["Administrator", "Loan Officer", "Risk Analyst"])
+require_role(["Loan Officer", "Risk Analyst", "Compliance Officer", "Administrator"])
 
 def load_css():
     css_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "css", "style.css")

@@ -133,7 +133,7 @@ sequenceDiagram
 ## 9. Developer Documentation
 
 *   **Modifying RL Models:** Do not change the 10-feature state vector without updating `loan_env.py` and retraining all `.zip` models.
-*   **Adding Streamlit Pages:** Place new scripts in `dashboard/pages/` and secure them by importing `require_role()` from `utils.auth`.
+*   **Adding Streamlit Pages:** Add new scripts to `dashboard/views/`, register them in `PAGE_REGISTRY` inside `utils/auth.py` (with the `roles` allowed to see them), and keep the in-page `require_role()` guard as defense-in-depth.
 
 ---
 

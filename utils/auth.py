@@ -1,8 +1,73 @@
 import streamlit as st
 import requests
 
-ROLES = ["Customer", "Loan Officer", "Risk Analyst", "Administrator"]
+ROLES = ["Customer", "Loan Officer", "Risk Analyst", "Compliance Officer", "Administrator"]
 API_URL = "http://localhost:8000/api"
+
+PAGES_DIR = "views"
+
+PAGE_REGISTRY = {
+    "1_Loan_Processing": {
+        "file": f"{PAGES_DIR}/1_Loan_Processing.py",
+        "title": "Loan Processing",
+        "icon": None,
+        "roles": ["Customer", "Loan Officer", "Risk Analyst", "Administrator"],
+    },
+    "2_Model_Training": {
+        "file": f"{PAGES_DIR}/2_Model_Training.py",
+        "title": "Model Training",
+        "icon": None,
+        "roles": ["Loan Officer", "Risk Analyst", "Administrator"],
+    },
+    "3_Analytics": {
+        "file": f"{PAGES_DIR}/3_Analytics.py",
+        "title": "Analytics",
+        "icon": None,
+        "roles": ["Loan Officer", "Risk Analyst", "Compliance Officer", "Administrator"],
+    },
+    "4_AB_Testing": {
+        "file": f"{PAGES_DIR}/4_AB_Testing.py",
+        "title": "A/B Testing",
+        "icon": None,
+        "roles": ["Loan Officer", "Administrator"],
+    },
+    "5_Reports": {
+        "file": f"{PAGES_DIR}/5_Reports.py",
+        "title": "Reports",
+        "icon": None,
+        "roles": ["Loan Officer", "Risk Analyst", "Compliance Officer", "Administrator"],
+    },
+    "6_What_If_Simulator": {
+        "file": f"{PAGES_DIR}/6_What_If_Simulator.py",
+        "title": "What-If Simulator",
+        "icon": None,
+        "roles": ["Loan Officer", "Risk Analyst", "Administrator"],
+    },
+    "7_Ollama_Assistant": {
+        "file": f"{PAGES_DIR}/7_Ollama_Assistant.py",
+        "title": "AI Chat Assistant",
+        "icon": None,
+        "roles": ["Customer", "Loan Officer", "Risk Analyst", "Compliance Officer", "Administrator"],
+    },
+    "8_Settings": {
+        "file": f"{PAGES_DIR}/8_Settings.py",
+        "title": "Settings",
+        "icon": None,
+        "roles": ["Customer", "Loan Officer", "Risk Analyst", "Compliance Officer", "Administrator"],
+    },
+    "9_Fairness_Report": {
+        "file": f"{PAGES_DIR}/9_Fairness_Report.py",
+        "title": "Fairness Report",
+        "icon": None,
+        "roles": ["Risk Analyst", "Compliance Officer", "Administrator"],
+    },
+}
+
+
+def allowed_pages_for_role(role: str) -> list[str]:
+    """Return list of page keys (PAGE_REGISTRY keys) visible to the given role."""
+    return [key for key, meta in PAGE_REGISTRY.items() if role in meta["roles"]]
+
 
 def require_role(allowed_roles: list):
     """Decorator or function to check if the current user has access to a page."""

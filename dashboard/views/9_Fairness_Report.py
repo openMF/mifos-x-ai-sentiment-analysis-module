@@ -9,10 +9,9 @@ from datetime import datetime
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from utils.auth import render_sidebar_auth, require_role, api_request
 
-st.set_page_config(page_title="Fairness Report", page_icon="⚖️", layout="wide")
+st.set_page_config(page_title="Fairness Report", layout="wide")
 
-render_sidebar_auth()
-require_role(["Administrator", "Risk Analyst", "Compliance Officer"])
+require_role(["Risk Analyst", "Compliance Officer", "Administrator"])
 
 def load_css():
     css_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "css", "style.css")

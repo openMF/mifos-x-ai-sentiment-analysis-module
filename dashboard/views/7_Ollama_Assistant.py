@@ -9,10 +9,9 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(
 from utils.auth import render_sidebar_auth, get_current_role, api_request, require_role
 from chatbot.rag import kb
 
-st.set_page_config(page_title="AI Chat Assistant", page_icon="💬", layout="wide")
+st.set_page_config(page_title="AI Chat Assistant", layout="wide")
 
-render_sidebar_auth()
-require_role(["Customer", "Loan Officer", "Risk Analyst", "Administrator"])
+require_role(["Customer", "Loan Officer", "Risk Analyst", "Compliance Officer", "Administrator"])
 
 def load_css():
     css_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend", "css", "style.css")
