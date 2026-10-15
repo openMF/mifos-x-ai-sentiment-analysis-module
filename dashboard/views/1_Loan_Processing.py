@@ -9,10 +9,9 @@ import plotly.graph_objects as go
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from utils.auth import render_sidebar_auth, get_current_role, api_request, require_role
 
-st.set_page_config(page_title="Loan Processing", page_icon="📝", layout="wide")
+st.set_page_config(page_title="Loan Processing", layout="wide")
 
-render_sidebar_auth()
-require_role(["Customer", "Loan Officer", "Administrator", "Risk Analyst"])
+require_role(["Customer", "Loan Officer", "Risk Analyst", "Administrator"])
 
 def load_css():
     css_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend", "css", "style.css")
@@ -30,7 +29,7 @@ if role not in ["Customer", "Loan Officer", "Administrator"]:
     st.error("Access Denied. You do not have permission to submit loan applications.")
     st.stop()
 
-st.markdown("<h2 style='color:#1F4E79;'>📝 Loan Origination & Processing</h2>", unsafe_allow_html=True)
+st.markdown("<h2 style='color:#1F4E79;'> Loan Origination & Processing</h2>", unsafe_allow_html=True)
 
 if "prediction_result" not in st.session_state:
     st.session_state.prediction_result = None
@@ -68,13 +67,13 @@ with st.form("loan_application_form"):
 def fetch_prediction(payload):
     progress_bar = st.progress(0)
     status_text = st.empty()
-    status_text.markdown("#### ⚙️ Validating Applicant Data...")
+    status_text.markdown("####  Validating Applicant Data...")
     progress_bar.progress(20)
     time.sleep(0.5)
-    status_text.markdown("#### 🧠 Running Feature Engineering & Sentiment Analysis...")
+    status_text.markdown("####  Running Feature Engineering & Sentiment Analysis...")
     progress_bar.progress(40)
     time.sleep(0.5)
-    status_text.markdown("#### 🤖 RL Ensemble Inference (PPO, DQN, DDQN, SAC)...")
+    status_text.markdown("####  RL Ensemble Inference (PPO, DQN, DDQN, SAC)...")
     progress_bar.progress(70)
     
     try:

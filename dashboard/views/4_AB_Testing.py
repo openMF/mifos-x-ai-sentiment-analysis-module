@@ -7,9 +7,8 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from utils.auth import require_role, api_request, render_sidebar_auth
 
-st.set_page_config(page_title="Live A/B Testing", page_icon="⚖️", layout="wide")
-require_role(["Administrator", "Loan Officer"])
-render_sidebar_auth()
+st.set_page_config(page_title="Live A/B Testing", layout="wide")
+require_role(["Loan Officer", "Administrator"])
 
 st.title("⚖️ Live A/B Testing Environment")
 st.markdown("Deploy different models to subsets of users and track real-world business metrics in real-time.")

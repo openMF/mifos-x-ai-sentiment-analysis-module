@@ -15,9 +15,8 @@ from utils.auth import render_sidebar_auth, get_current_role, api_request, requi
 
 API_URL = "http://127.0.0.1:8000/api"
 
-st.set_page_config(page_title="Model Training Studio", page_icon="🧠", layout="wide")
+st.set_page_config(page_title="Model Training Studio", layout="wide")
 
-render_sidebar_auth()
 require_role(["Administrator", "Loan Officer", "Risk Analyst"])
 
 # Custom CSS for Enterprise look

@@ -8,10 +8,9 @@ import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from utils.auth import render_sidebar_auth, get_current_role, api_request, require_role
 
-st.set_page_config(page_title="Enterprise Analytics", page_icon="📈", layout="wide")
+st.set_page_config(page_title="Enterprise Analytics", layout="wide")
 
-render_sidebar_auth()
-require_role(["Administrator", "Loan Officer", "Risk Analyst"])
+require_role(["Administrator"])
 
 def load_css():
     css_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend", "css", "style.css")
@@ -23,8 +22,8 @@ load_css()
 st.sidebar.markdown("### 🏦 **MIFOS X** AI Platform")
 role = get_current_role()
 
-if role not in ["Risk Analyst", "Administrator"]:
-    st.error("Access Denied. Only Risk Analysts and Administrators can view Analytics.")
+if role != "Administrator":
+    st.error("Access Denied. Only Administrators can view Analytics.")
     st.stop()
 
 st.markdown("<h2 style='color:#1F4E79;'>📈 Enterprise Portfolio Analytics</h2>", unsafe_allow_html=True)
